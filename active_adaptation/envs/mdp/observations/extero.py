@@ -18,7 +18,18 @@ if active_adaptation.get_backend() == "isaac":
     from isaaclab.utils.warp import raycast_mesh
 
 
-from simple_raycaster import MultiMeshRaycaster
+def _import_simple_raycaster(name: str):
+    try:
+        module = __import__("simple_raycaster", fromlist=[name])
+    except ModuleNotFoundError as exc:
+        if exc.name != "simple_raycaster":
+            raise
+        raise ModuleNotFoundError(
+            "Observation requires optional dependency `simple_raycaster`. "
+            "Install it or disable exteroceptive raycast observations such as "
+            "`height_scan` and `raycast_camera`."
+        ) from exc
+    return getattr(module, name)
 
 
 def raymap(width: int, height: int, fov: float) -> Float[torch.Tensor, "height width 3"]:
@@ -178,6 +189,7 @@ class height_scan(ObservationV2):
             self.ground_mesh_quat_w = torch.tensor([1.0, 0.0, 0.0, 0.0]).expand(self.num_envs, 1, 4)
             self.ray_dirs_w = torch.tensor([0.0, 0.0, -1.0]).expand(self.num_envs, self.n_rays, 3)
 
+        MultiMeshRaycaster = _import_simple_raycaster("MultiMeshRaycaster")
         self.raycaster = MultiMeshRaycaster([self.env.ground_mesh], device=self.device)
         self.target_assets = []
 
@@ -391,7 +403,7 @@ class raycast_camera(ObservationV2):
         assert self.shape == (height, width), "Resolution must match the raymap shape"
         self.num_rays = self.raymap.shape[0] * self.raymap.shape[1]
 
-        from simple_raycaster import MultiMeshRaycasterV2
+        MultiMeshRaycasterV2 = _import_simple_raycaster("MultiMeshRaycasterV2")
 
         self.raycaster = MultiMeshRaycasterV2(device=self.device)
         self.raycaster.add_isaac_static("/World/ground")
